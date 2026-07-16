@@ -1,1 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Electronics Toolkit</title>
+
+<link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>⚡ Electronics Toolkit</h1>
+
+<h2>Voltage Divider Calculator</h2>
+
+<label>Input Voltage (Vin)</label>
+<input id="vin" type="number" placeholder="12">
+
+<label>Resistor R1 (Ω)</label>
+<input id="r1" type="number" placeholder="100000">
+
+<label>Resistor R2 (Ω)</label>
+<input id="r2" type="number" placeholder="33000">
+
+<div class="checkbox">
+
+<input type="checkbox" id="adcEnable">
+
+<label for="adcEnable">Calculate ADC Value</label>
+
+</div>
+
+<div id="adcSection" style="display:none;">
+
+<label>MCU Vref (V)</label>
+
+<input id="vref" type="number" value="3.3">
+
+<label>ADC Resolution</label>
+
+<select id="bits">
+
+<option>8</option>
+<option>10</option>
+<option selected>12</option>
+<option>14</option>
+<option>16</option>
+
+</select>
+
+</div>
+
+<button onclick="calculate()">
+
+Calculate
+
+</button>
+
+<div class="result">
+
+<h3>Results</h3>
+
+<p id="voutText">Vout : --</p>
+
+<p id="adcText"></p>
+
+<p id="warning"></p>
+
+</div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
