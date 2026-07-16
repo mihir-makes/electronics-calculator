@@ -1,72 +1,91 @@
-document.getElementById("adcEnable").addEventListener("change", function(){
+// Show / Hide ADC Section
 
-document.getElementById("adcSection").style.display =
-this.checked ? "block" : "none";
+document.getElementById("adcEnable").addEventListener("change", function () {
+
+    document.getElementById("adcSection").style.display =
+        this.checked ? "block" : "none";
 
 });
 
-function calculate(){
+function calculate() {
 
-let vin=parseFloat(document.getElementById("vin").value);
+    let vin = parseFloat(document.getElementById("vin").value);
 
-let r1=parseFloat(document.getElementById("r1").value);
+    let r1 = parseFloat(document.getElementById("r1").value);
+    let r2 = parseFloat(document.getElementById("r2").value);
 
-let r2=parseFloat(document.getElementById("r2").value);
+    if (isNaN(vin) || isNaN(r1) || isNaN(r2) || r1 <= 0 || r2 <= 0) {
 
-if(isNaN(vin)||isNaN(r1)||isNaN(r2)||r1<=0||r2<=0){
+        alert("Please enter valid values.");
 
-alert("Please enter valid values.");
+        return;
 
-return;
+    }
 
-}
+    // Convert resistor units
 
-let vout=vin*r2/(r1+r2);
+    r1 *= parseFloat(document.getElementById("r1unit").value);
+    r2 *= parseFloat(document.getElementById("r2unit").value);
 
-document.getElementById("voutText").innerHTML=
+    // Voltage Divider
 
-"<b>Vout :</b> "+vout.toFixed(4)+" V";
+    let vout = vin * r2 / (r1 + r2);
 
-document.getElementById("adcText").innerHTML="";
+    document.getElementById("voutText").innerHTML =
+        vout.toFixed(4) + " V";
 
-document.getElementById("warning").innerHTML="";
+    document.getElementById("adcText").innerHTML = "--";
 
-if(document.getElementById("adcEnable").checked){
+    document.getElementById("warning").innerHTML = "Calculation Complete";
+    document.getElementById("warning").style.color = "#2C3E50";
 
-let vref=parseFloat(document.getElementById("vref").value);
+    // ADC Calculation
 
-let bits=parseInt(document.getElementById("bits").value);
+    if (document.getElementById("adcEnable").checked) {
 
-let max=(2**bits)-1;
+        let vref = parseFloat(document.getElementById("vref").value);
 
-let adc=Math.round((vout/vref)*max);
+        if (isNaN(vref) || vref <= 0) {
 
-if(adc>max) adc=max;
+            alert("Please enter MCU Vref.");
 
-document.getElementById("adcText").innerHTML=
+            return;
 
-"<b>ADC Count :</b> "+adc+" / "+max;
+        }
 
-if(vout>vref){
+        let bits = parseInt(document.getElementById("bits").value);
 
-document.getElementById("warning").innerHTML=
+        let maxADC = Math.pow(2, bits) - 1;
 
-"Warning : Voltage exceeds Vref. ADC will saturate.";
+        let adc = Math.round((vout / vref) * maxADC);
 
-document.getElementById("warning").style.color="red";
+        if (adc > maxADC)
+            adc = maxADC;
 
-}
+        if (adc < 0)
+            adc = 0;
 
-else{
+        document.getElementById("adcText").innerHTML =
+            adc + " / " + maxADC;
 
-document.getElementById("warning").innerHTML=
+        if (vout > vref) {
 
-"Voltage is within ADC range.";
+            document.getElementById("warning").innerHTML =
+                "Your Input Voltage exceeds MCU Vref";
 
-document.getElementById("warning").style.color="lime";
+            document.getElementById("warning").style.color = "red";
 
-}
+        }
 
-}
+        else {
+
+            document.getElementById("warning").innerHTML =
+                "Your Voltage within ADC range";
+
+            document.getElementById("warning").style.color = "green";
+
+        }
+
+    }
 
 }
