@@ -1,4 +1,4 @@
-// ---------- Elements ----------
+// - Elements --
 const modeBasic   = document.getElementById('modeBasic');
 const modeHV      = document.getElementById('modeHV');
 const basicSection = document.getElementById('basicSection');
@@ -29,7 +29,7 @@ const statusItem = statusEl.closest('.result-item');
 const upperAnalysis = document.getElementById('upperAnalysis');
 const lowerAnalysis = document.getElementById('lowerAnalysis');
 
-// ---------- Helpers ----------
+// Helpers
 function formatResistance(ohms){
   if (!isFinite(ohms)) return '--';
   if (ohms >= 1e6) return (ohms/1e6).toFixed(3).replace(/\.?0+$/,'') + ' MΩ';
@@ -62,7 +62,7 @@ function setStatus(text, kind){
   if (kind) statusItem.classList.add('status-' + kind);
 }
 
-// ---------- Dynamic resistor rows ----------
+// Dynamic resistor rows ----###########
 function makeRow(){
   const row = document.createElement('div');
   row.className = 'resistor-row';
@@ -138,7 +138,7 @@ document.getElementById('addLower').addEventListener('click', () => addResistor(
   listEl.addEventListener('input', () => updateEquivalent(listEl));
 });
 
-// ---------- Mode toggle ----------
+// - mode toggle-
 function refreshMode(){
   const hv = modeHV.checked;
   basicSection.classList.toggle('hidden', hv);
@@ -147,12 +147,12 @@ function refreshMode(){
 modeBasic.addEventListener('change', refreshMode);
 modeHV.addEventListener('change', refreshMode);
 
-// ---------- ADC toggle ----------
+// ---ADC toggle
 adcEnable.addEventListener('change', () => {
   adcSection.classList.toggle('hidden', !adcEnable.checked);
 });
 
-// ---------- Analysis rendering ----------
+// ---Analysis check rendering --
 function renderAnalysis(container, items, current){
   container.innerHTML = '';
   items.forEach(item => {
@@ -168,7 +168,7 @@ function renderAnalysis(container, items, current){
   });
 }
 
-// ---------- ADC calculation ----------
+// ---- ADC calculation 
 function calcAdc(vout){
   if (!adcEnable.checked) return { text: '--', warn: false };
   const vref = parseFloat(vrefInput.value);
@@ -181,7 +181,7 @@ function calcAdc(vout){
   return { text: `${count} / ${maxCount}`, warn: saturated };
 }
 
-// ---------- Main calculate ----------
+// ---Main calculation --
 function calculate(){
   const hv = modeHV.checked;
   let vin, upperOhms, lowerOhms, upperItems, lowerItems;
