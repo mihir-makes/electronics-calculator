@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 
 <meta charset="UTF-8">
@@ -15,68 +16,132 @@
 
 <div class="container">
 
-<h1> Electronics Toolkit</h1>
+    <header>
 
-<h2>Voltage Divider Calculator</h2>
+        <h1>⚡ Electronics Toolkit</h1>
+        <p class="subtitle">Voltage Divider Calculator</p>
 
-<label>Input Voltage (Vin)</label>
-<input id="vin" type="number" placeholder="12">
+    </header>
 
-<label>Resistor R1 (Ω)</label>
-<input id="r1" type="number" placeholder="100000">
+    <div class="main-grid">
 
-<label>Resistor R2 (Ω)</label>
-<input id="r2" type="number" placeholder="33000">
+        <!-- LEFT SIDE -->
 
-<div class="checkbox">
+        <div class="card">
 
-<input type="checkbox" id="adcEnable">
+            <h2>Input Parameters</h2>
 
-<label for="adcEnable">Calculate ADC Value</label>
+            <label>Input Voltage Vin (V)</label>
+            <input id="vin" type="number" placeholder="">
 
-</div>
+            <label>Resistor R1</label>
 
-<div id="adcSection" style="display:none;">
+            <div class="input-row">
 
-<label>MCU Vref (V)</label>
+                <input id="r1" type="number" placeholder="">
 
-<input id="vref" type="number" value="3.3">
+                <select id="r1unit">
+                    <option value="1">Ω</option>
+                    <option value="1000">kΩ</option>
+                    <option value="1000000">MΩ</option>
+                </select>
 
-<label>ADC Resolution</label>
+            </div>
 
-<select id="bits">
+            <label>Resistor R2</label>
 
-<option>8</option>
-<option>10</option>
-<option selected>12</option>
-<option>14</option>
-<option>16</option>
+            <div class="input-row">
 
-</select>
+                <input id="r2" type="number" placeholder="">
 
-</div>
+                <select id="r2unit">
+                    <option value="1">Ω</option>
+                    <option value="1000">kΩ</option>
+                    <option value="1000000">MΩ</option>
+                </select>
 
-<button onclick="calculate()">
+            </div>
 
-Calculate
+            <hr>
 
-</button>
+            <label class="checkbox">
 
-<div class="result">
+                <input type="checkbox" id="adcEnable">
 
-<h3>Results</h3>
+                Calculate ADC Value
 
-<p id="voutText">Vout : --</p>
+            </label>
 
-<p id="adcText"></p>
+            <div id="adcSection" style="display:none;">
 
-<p id="warning"></p>
+                <label>MCU Vref (V)</label>
 
-</div>
+                <input id="vref" type="number" placeholder="">
+
+                <label>ADC Resolution</label>
+
+                <select id="bits">
+
+                    <option value="8">8 Bit</option>
+                    <option value="10">10 Bit</option>
+                    <option value="12" selected>12 Bit</option>
+                    <option value="14">14 Bit</option>
+                    <option value="16">16 Bit</option>
+
+                </select>
+
+            </div>
+
+            <button onclick="calculate()">
+
+                Calculate
+
+            </button>
+
+        </div>
+
+        <!-- RIGHT SIDE -->
+
+        <div class="card">
+
+            <h2>Results</h2>
+
+            <div class="result-box">
+
+                <div class="result-item">
+
+                    <span>Voltage Divider Output</span>
+
+                    <h3 id="voutText">-- V</h3>
+
+                </div>
+
+                <div class="result-item">
+
+                    <span>ADC Count</span>
+
+                    <h3 id="adcText">--</h3>
+
+                </div>
+
+                <div class="result-item">
+
+                    <span>Status</span>
+
+                    <h3 id="warning">Waiting for Calculation</h3>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
 
 </div>
 
 <script src="script.js"></script>
 
 </body>
+
 </html>
