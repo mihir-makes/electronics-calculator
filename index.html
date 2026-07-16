@@ -1,145 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
-
-<title>Electronics Calculator 01</title>
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Electronics Toolkit</title>
 <link rel="stylesheet" href="style.css">
-
 </head>
-
 <body>
-
 <div class="container">
 
-    <header>
+  <header>
+    <h1>Electronics Toolkit</h1>
+    <p class="subtitle">Voltage Divider Calculator</p>
+  </header>
 
-        <h1>Electronics Calculator</h1>
-        <p class="subtitle">Voltage Divider Calculator</p>
+  <!-- MODE SELECTOR -->
+  <div class="card">
+    <h2>Calculation Mode</h2>
+    <label class="radio-label">
+      <input type="radio" name="mode" id="modeBasic" value="basic" checked> Basic Voltage Divider
+    </label>
+    <label class="radio-label">
+      <input type="radio" name="mode" id="modeHV" value="hv"> High Voltage Divider
+    </label>
+  </div>
 
-    </header>
+  <div class="main-grid">
 
-    <div class="main-grid">
+    <!-- LEFT COLUMN: INPUTS -->
+    <div class="left-col">
 
-        <!-- LEFT SIDE -->
+      <!-- BASIC MODE -->
+      <div id="basicSection" class="card">
+        <h2>Basic Divider</h2>
+        <label for="vin">Vin (V)</label>
+        <input id="vin" type="number" step="any" placeholder="e.g. 5">
 
-        <div class="card">
-
-            <h2>Input Parameters</h2>
-
-            <label>Input Voltage Vin (V)</label>
-            <input id="vin" type="number" placeholder="">
-
-            <label>Resistor R1</label>
-
-            <div class="input-row">
-
-                <input id="r1" type="number" placeholder="">
-
-                <select id="r1unit">
-                    <option value="1">Ω</option>
-                    <option value="1000">kΩ</option>
-                    <option value="1000000">MΩ</option>
-                </select>
-
-            </div>
-
-            <label>Resistor R2</label>
-
-            <div class="input-row">
-
-                <input id="r2" type="number" placeholder="">
-
-                <select id="r2unit">
-                    <option value="1">Ω</option>
-                    <option value="1000">kΩ</option>
-                    <option value="1000000">MΩ</option>
-                </select>
-
-            </div>
-
-            <hr>
-
-            <label class="checkbox">
-
-                <input type="checkbox" id="adcEnable">
-
-                Calculate ADC Value
-
-            </label>
-
-            <div id="adcSection" style="display:none;">
-
-                <label>MCU Vref (V)</label>
-
-                <input id="vref" type="number" placeholder="">
-
-                <label>ADC Resolution</label>
-
-                <select id="bits">
-
-                    <option value="8">8 Bit</option>
-                    <option value="10">10 Bit</option>
-                    <option value="12" selected>12 Bit</option>
-                    <option value="14">14 Bit</option>
-                    <option value="16">16 Bit</option>
-
-                </select>
-
-            </div>
-
-            <button onclick="calculate()">
-
-                Calculate
-
-            </button>
-
+        <label>R1 (Upper)</label>
+        <div class="input-row">
+          <input id="r1" type="number" step="any" placeholder="Resistance">
+          <select id="r1unit">
+            <option value="1">Ω</option>
+            <option value="1000">kΩ</option>
+            <option value="1000000">MΩ</option>
+          </select>
         </div>
 
-        <!-- RIGHT SIDE -->
-
-        <div class="card">
-
-            <h2>Results</h2>
-
-            <div class="result-box">
-
-                <div class="result-item">
-
-                    <span>Voltage Divider Output</span>
-
-                    <h3 id="voutText">-- V</h3>
-
-                </div>
-
-                <div class="result-item">
-
-                    <span>ADC Count</span>
-
-                    <h3 id="adcText">--</h3>
-
-                </div>
-
-                <div class="result-item">
-
-                    <span>Status</span>
-
-                    <h3 id="warning">Waiting for Calculation</h3>
-
-                </div>
-
-            </div>
-
+        <label>R2 (Lower)</label>
+        <div class="input-row">
+          <input id="r2" type="number" step="any" placeholder="Resistance">
+          <select id="r2unit">
+            <option value="1">Ω</option>
+            <option value="1000">kΩ</option>
+            <option value="1000000">MΩ</option>
+          </select>
         </div>
+      </div>
 
+      <!-- HIGH VOLTAGE MODE -->
+      <div id="hvSection" class="card hidden">
+        <h2>High Voltage Divider</h2>
+        <label for="hvVin">Vin (V)</label>
+        <input id="hvVin" type="number" step="any" placeholder="e.g. 400">
+
+        <h3>Upper Divider (Series)</h3>
+        <p class="eq-line">Equivalent Resistance: <span id="upperEq">-- Ω</span></p>
+        <div id="upperList"></div>
+        <button type="button" id="addUpper">➕ Add Resistor</button>
+
+        <hr>
+
+        <h3>Lower Divider (Series)</h3>
+        <p class="eq-line">Equivalent Resistance: <span id="lowerEq">-- Ω</span></p>
+        <div id="lowerList"></div>
+        <button type="button" id="addLower">➕ Add Resistor</button>
+      </div>
+
+      <!-- ADC SECTION (shared by both modes) -->
+      <div class="card">
+        <h2>ADC Conversion (optional)</h2>
+        <label class="radio-label">
+          <input type="checkbox" id="adcEnable"> Calculate ADC Count
+        </label>
+        <div id="adcSection" class="hidden">
+          <label for="vref">MCU Vref (V)</label>
+          <input id="vref" type="number" step="any" placeholder="e.g. 3.3">
+          <label for="bits">ADC Resolution</label>
+          <select id="bits">
+            <option value="8">8-bit</option>
+            <option value="10">10-bit</option>
+            <option value="12" selected>12-bit</option>
+            <option value="14">14-bit</option>
+            <option value="16">16-bit</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="button" id="calcBtn" class="calc-btn">Calculate</button>
     </div>
 
+    <!-- RIGHT COLUMN: RESULTS -->
+    <div class="card">
+      <h2>Results</h2>
+      <div class="result-item"><span>Equivalent Upper Resistance</span><h3 id="eqUpper">--</h3></div>
+      <div class="result-item"><span>Equivalent Lower Resistance</span><h3 id="eqLower">--</h3></div>
+      <div class="result-item"><span>Divider Ratio</span><h3 id="ratio">--</h3></div>
+      <div class="result-item"><span>Divider Current</span><h3 id="current">--</h3></div>
+      <div class="result-item"><span>Vout</span><h3 id="vout">--</h3></div>
+      <div class="result-item"><span>ADC Count</span><h3 id="adc">--</h3></div>
+      <div class="result-item"><span>Status</span><h3 id="status">Waiting</h3></div>
+
+      <hr>
+      <h2>Upper Resistor Analysis</h2>
+      <div id="upperAnalysis"><p>Voltage & Power placeholders.</p></div>
+
+      <hr>
+      <h2>Lower Resistor Analysis</h2>
+      <div id="lowerAnalysis"><p>Voltage & Power placeholders.</p></div>
+    </div>
+
+  </div>
 </div>
-
 <script src="script.js"></script>
-
 </body>
-
 </html>
