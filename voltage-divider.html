@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Voltage Divider Calculator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="topnav"><a href="index.html">&larr; Home</a></div>
+
+  <header>
+    <h1>Voltage Divider Calculator</h1>
+    <p class="subtitle">Find Vout, current, ratio and ADC count</p>
+  </header>
+
+  <div class="mode-toggle">
+    <input type="radio" name="mode" id="modeBasic" value="basic" checked>
+    <label for="modeBasic">Basic Voltage Divider</label>
+    <input type="radio" name="mode" id="modeHV" value="hv">
+    <label for="modeHV">High Voltage Divider</label>
+  </div>
+
+  <div class="main-grid">
+    <div class="left-col">
+
+      <div id="basicSection" class="card">
+        <h2>Basic Divider</h2>
+        <label for="vin">Vin (V)</label>
+        <input id="vin" type="number" step="any" placeholder="e.g. 5">
+
+        <label>R1 (Upper)</label>
+        <div class="input-row">
+          <input id="r1" type="number" step="any" placeholder="Resistance">
+          <select id="r1unit">
+            <option value="1">Ω</option><option value="1000">kΩ</option><option value="1000000">MΩ</option>
+          </select>
+        </div>
+
+        <label>R2 (Lower)</label>
+        <div class="input-row">
+          <input id="r2" type="number" step="any" placeholder="Resistance">
+          <select id="r2unit">
+            <option value="1">Ω</option><option value="1000">kΩ</option><option value="1000000">MΩ</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="hvSection" class="card hidden">
+        <h2>High Voltage Divider</h2>
+        <label for="hvVin">Vin (V)</label>
+        <input id="hvVin" type="number" step="any" placeholder="e.g. 400">
+
+        <h3>Upper Divider (Series) &nbsp;—&nbsp; <span id="upperEq">-- Ω</span></h3>
+        <div id="upperList" class="resistor-scroll"></div>
+        <button type="button" id="addUpper">➕ Add Resistor</button>
+
+        <hr>
+
+        <h3>Lower Divider (Series) &nbsp;—&nbsp; <span id="lowerEq">-- Ω</span></h3>
+        <div id="lowerList" class="resistor-scroll"></div>
+        <button type="button" id="addLower">➕ Add Resistor</button>
+      </div>
+
+      <div class="card">
+        <h2>ADC Conversion (optional)</h2>
+        <label class="radio-label"><input type="checkbox" id="adcEnable"> Calculate ADC Count</label>
+        <div id="adcSection" class="hidden">
+          <label for="vref">MCU Vref (V)</label>
+          <input id="vref" type="number" step="any" placeholder="e.g. 3.3">
+          <label for="bits">ADC Resolution</label>
+          <select id="bits">
+            <option value="8">8-bit</option><option value="10">10-bit</option>
+            <option value="12" selected>12-bit</option><option value="14">14-bit</option><option value="16">16-bit</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="button" id="calcBtn" class="calc-btn">Calculate</button>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <div class="results-grid">
+        <div class="result-item"><span>Eq. Upper Resistance</span><h3 id="eqUpper">--</h3></div>
+        <div class="result-item"><span>Eq. Lower Resistance</span><h3 id="eqLower">--</h3></div>
+        <div class="result-item"><span>Divider Ratio</span><h3 id="ratio">--</h3></div>
+        <div class="result-item"><span>Divider Current</span><h3 id="current">--</h3></div>
+        <div class="result-item"><span>Vout</span><h3 id="vout">--</h3></div>
+        <div class="result-item"><span>ADC Count</span><h3 id="adc">--</h3></div>
+        <div class="result-item wide"><span>Status</span><h3 id="status">Waiting</h3></div>
+      </div>
+
+      <hr>
+      <h2>Upper Resistor Analysis</h2>
+      <div id="upperAnalysis"><p>Voltage &amp; Power placeholders.</p></div>
+
+      <hr>
+      <h2>Lower Resistor Analysis</h2>
+      <div id="lowerAnalysis"><p>Voltage &amp; Power placeholders.</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const modeBasic=document.getElementById('modeBasic'),modeHV=document.getElementById('modeHV');
+const basicSection=document.getElementById('basicSection'),hvSection=document.getElementById('hvSection');
+const upperList=document.getElementById('upperList'),lowerList=document.getElementById('lowerList');
+const upperEqSpan=document.getElementById('upperEq'),lowerEqSpan=document.getElementById('lowerEq');
+const adcEnable=document.getElementById('adcEnable'),adcSection=document.getElementById('adcSection');
+const vrefInput=document.getElementById('vref'),bitsSelect=document.getElementById('bits');
+const calcBtn=document.getElementById('calcBtn');
+const eqUpperEl=document.getElementById('eqUpper'),eqLowerEl=document.getElementById('eqLower');
+const ratioEl=document.getElementById('ratio'),currentEl=document.getElementById('current');
+const voutEl=document.getElementById('vout'),adcEl=document.getElementById('adc');
+const statusEl=document.getElementById('status'),statusItem=statusEl.closest('.result-item');
+const upperAnalysis=document.getElementById('upperAnalysis'),lowerAnalysis=document.getElementById('lowerAnalysis');
+
+function formatResistance(o){if(!isFinite(o))return'--';if(o>=1e6)return(o/1e6).toFixed(3).replace(/\.?0+$/,'')+' MΩ';if(o>=1e3)return(o/1e3).toFixed(3).replace(/\.?0+$/,'')+' kΩ';return o.toFixed(2).replace(/\.?0+$/,'')+' Ω';}
+function formatVoltage(v){if(!isFinite(v))return'--';return v.toFixed(3).replace(/\.?0+$/,'')+' V';}
+function formatCurrent(a){if(!isFinite(a))return'--';if(Math.abs(a)<1e-3)return(a*1e6).toFixed(2)+' µA';if(Math.abs(a)<1)return(a*1e3).toFixed(3)+' mA';return a.toFixed(4)+' A';}
+function formatPower(w){if(!isFinite(w))return'--';if(Math.abs(w)<1e-3)return(w*1e6).toFixed(2)+' µW';if(Math.abs(w)<1)return(w*1e3).toFixed(3)+' mW';return w.toFixed(4)+' W';}
+function setStatus(t,k){statusEl.textContent=t;statusItem.classList.remove('status-ok','status-error','status-warn');if(k)statusItem.classList.add('status-'+k);}
+
+function makeRow(){const row=document.createElement('div');row.className='resistor-row';row.innerHTML=`
+  <span class="row-label"></span>
+  <input type="number" step="any" class="r-value" placeholder="Resistance">
+  <select class="r-unit"><option value="1">Ω</option><option value="1000">kΩ</option><option value="1000000">MΩ</option></select>
+  <button type="button" class="remove-btn">➖</button>`;return row;}
+function addResistor(l){l.appendChild(makeRow());renumber(l);updateEquivalent(l);}
+function removeResistor(btn,l){const row=btn.closest('.resistor-row');if(l.children.length<=1)return;row.remove();renumber(l);updateEquivalent(l);}
+function renumber(l){const p=l===upperList?'RU':'RL';[...l.children].forEach((row,i)=>{row.querySelector('.row-label').textContent=p+(i+1);});[...l.querySelectorAll('.remove-btn')].forEach(b=>{b.disabled=l.children.length<=1;});}
+function readResistorList(l){return[...l.children].map(row=>{const val=parseFloat(row.querySelector('.r-value').value);const mult=parseFloat(row.querySelector('.r-unit').value);const ohms=(isFinite(val)&&val>0)?val*mult:NaN;const label=row.querySelector('.row-label').textContent;return{ohms,label};});}
+function updateEquivalent(l){const values=readResistorList(l);const span=l===upperList?upperEqSpan:lowerEqSpan;if(values.some(v=>!isFinite(v.ohms))){span.textContent='-- Ω';return;}const total=values.reduce((s,v)=>s+v.ohms,0);span.textContent=formatResistance(total);}
+
+addResistor(upperList);addResistor(lowerList);
+document.getElementById('addUpper').addEventListener('click',()=>addResistor(upperList));
+document.getElementById('addLower').addEventListener('click',()=>addResistor(lowerList));
+[upperList,lowerList].forEach(l=>{l.addEventListener('click',e=>{if(e.target.classList.contains('remove-btn'))removeResistor(e.target,l);});l.addEventListener('input',()=>updateEquivalent(l));});
+
+function refreshMode(){const hv=modeHV.checked;basicSection.classList.toggle('hidden',hv);hvSection.classList.toggle('hidden',!hv);}
+modeBasic.addEventListener('change',refreshMode);modeHV.addEventListener('change',refreshMode);
+adcEnable.addEventListener('change',()=>{adcSection.classList.toggle('hidden',!adcEnable.checked);});
+
+function renderAnalysis(container,items,current){container.innerHTML='';items.forEach(item=>{const voltage=current*item.ohms;const power=current*current*item.ohms;const row=document.createElement('div');row.className='analysis-item';row.innerHTML=`<span class="a-label">${item.label} (${formatResistance(item.ohms)})</span><span class="a-values">V = ${formatVoltage(voltage)} &nbsp;|&nbsp; P = ${formatPower(power)}</span>`;container.appendChild(row);});}
+
+function calcAdc(vout){if(!adcEnable.checked)return{text:'--',warn:false};const vref=parseFloat(vrefInput.value);const bits=parseInt(bitsSelect.value,10);if(!isFinite(vref)||vref<=0)return{text:'Set Vref',warn:true};const maxCount=Math.pow(2,bits)-1;let count=Math.round((vout/vref)*maxCount);const saturated=count>maxCount||count<0;count=Math.min(maxCount,Math.max(0,count));return{text:`${count} / ${maxCount}`,warn:saturated};}
+
+function calculate(){
+  const hv=modeHV.checked;let vin,upperOhms,lowerOhms,upperItems,lowerItems;
+  if(!hv){
+    vin=parseFloat(document.getElementById('vin').value);
+    const r1=parseFloat(document.getElementById('r1').value),r1u=parseFloat(document.getElementById('r1unit').value);
+    const r2=parseFloat(document.getElementById('r2').value),r2u=parseFloat(document.getElementById('r2unit').value);
+    if(![vin,r1,r2].every(n=>isFinite(n)&&!isNaN(n))||r1<=0||r2<=0){setStatus('Enter valid Vin, R1, R2','error');return;}
+    upperOhms=r1*r1u;lowerOhms=r2*r2u;
+    upperItems=[{ohms:upperOhms,label:'R1'}];lowerItems=[{ohms:lowerOhms,label:'R2'}];
+  }else{
+    vin=parseFloat(document.getElementById('hvVin').value);
+    upperItems=readResistorList(upperList);lowerItems=readResistorList(lowerList);
+    if(!isFinite(vin)||upperItems.some(i=>!isFinite(i.ohms))||lowerItems.some(i=>!isFinite(i.ohms))){setStatus('Enter valid Vin and resistor values','error');return;}
+    upperOhms=upperItems.reduce((s,i)=>s+i.ohms,0);lowerOhms=lowerItems.reduce((s,i)=>s+i.ohms,0);
+  }
+  const total=upperOhms+lowerOhms;
+  if(total<=0){setStatus('Total resistance must be > 0','error');return;}
+  const ratio=lowerOhms/total,current=vin/total,vout=vin*ratio;
+  eqUpperEl.textContent=formatResistance(upperOhms);eqLowerEl.textContent=formatResistance(lowerOhms);
+  ratioEl.textContent=ratio.toFixed(4);currentEl.textContent=formatCurrent(current);voutEl.textContent=formatVoltage(vout);
+  const adcResult=calcAdc(vout);adcEl.textContent=adcResult.text;
+  renderAnalysis(upperAnalysis,upperItems,current);renderAnalysis(lowerAnalysis,lowerItems,current);
+  if(adcResult.warn){setStatus('ADC saturated / check Vref','warn');}else{setStatus('OK','ok');}
+}
+calcBtn.addEventListener('click',calculate);
+refreshMode();
+</script>
+</body>
+</html>
