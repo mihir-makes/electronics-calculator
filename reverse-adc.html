@@ -175,9 +175,9 @@ function svgGnd(cx,y){
 
 function buildSchematic(upperItems,lowerItems,vinVal,voutVal){
   const cx=110,stub=13,rectW=22,rectH=32;
-  let y=28,parts=[];
-  parts.push(svgLine(cx,6,cx,y));
-  parts.push(svgText(cx,16,'Vin = '+formatVoltage(vinVal),{weight:'bold',size:11,color:'#355c7d'}));
+  let y=40,parts=[];
+  parts.push(svgLine(cx,8,cx,y));
+  parts.push(svgText(cx-12,22,'Vin = '+formatVoltage(vinVal),{anchor:'end',weight:'bold',size:11,color:'#355c7d'}));
 
   function drawChain(items){
     items.forEach(item=>{
