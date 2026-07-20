@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
 <title>Reverse ADC Calculator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
 
   <header>
     <h1>Reverse ADC Calculator</h1>
-    <p class="subtitle">Insert the resistors and the raw ADC reading, find Vin</p>
+    <p class="subtitle">Know the resistors and the ADC reading — find Vin</p>
   </header>
 
   <div class="mode-toggle">
@@ -49,13 +49,13 @@
 
         <h3>Upper Divider (Series) &nbsp;—&nbsp; <span id="upperEq">-- Ω</span></h3>
         <div id="upperList" class="resistor-scroll"></div>
-        <button type="button" id="addUpper"> Add Resistor</button>
+        <button type="button" id="addUpper">➕ Add Resistor</button>
 
         <hr>
 
         <h3>Lower Divider (Series) &nbsp;—&nbsp; <span id="lowerEq">-- Ω</span></h3>
         <div id="lowerList" class="resistor-scroll"></div>
-        <button type="button" id="addLower">Add Resistor</button>
+        <button type="button" id="addLower">➕ Add Resistor</button>
       </div>
 
       <div class="card">
@@ -94,6 +94,18 @@
       <h2>Lower Resistor Analysis</h2>
       <div id="lowerAnalysis"><p>Voltage &amp; Power placeholders.</p></div>
     </div>
+  </div>
+
+  <div class="card schematic-card">
+    <h2>Circuit Schematic</h2>
+    <div id="schematicWrap" class="schematic-wrap">
+      <p class="schematic-empty">Run Calculate to draw the circuit.</p>
+    </div>
+  </div>
+
+  <div class="site-footer">
+    <p class="footnote">Assumes ideal resistors; ADC input impedance and pin loading are not modeled.</p>
+    <p class="credit">Made by <b>Mihir Patel</b> — Electrical Engineer, Electronics &nbsp;|&nbsp; Rev 1.0 — Electronics Toolkit</p>
   </div>
 </div>
 
@@ -149,6 +161,50 @@ function adcToVoltage(){
   return {vout, error:null};
 }
 
+// ---- schematic drawing ----
+const schematicWrap=document.getElementById('schematicWrap');
+function svgLine(x1,y1,x2,y2){return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#355c7d" stroke-width="2"/>`;}
+function svgRect(x,y,w,h){return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff8ed" stroke="#d8c3a5" stroke-width="2"/>`;}
+function svgText(x,y,str,opts={}){const anchor=opts.anchor||'middle';const size=opts.size||10;const weight=opts.weight||'normal';const color=opts.color||'#2c3e50';return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${size}" font-weight="${weight}" fill="${color}">${str}</text>`;}
+function svgGnd(cx,y){
+  return svgLine(cx,y,cx,y+6)+
+    `<line x1="${cx-12}" y1="${y+6}" x2="${cx+12}" y2="${y+6}" stroke="#355c7d" stroke-width="2"/>`+
+    `<line x1="${cx-8}" y1="${y+11}" x2="${cx+8}" y2="${y+11}" stroke="#355c7d" stroke-width="2"/>`+
+    `<line x1="${cx-4}" y1="${y+16}" x2="${cx+4}" y2="${y+16}" stroke="#355c7d" stroke-width="2"/>`;
+}
+
+function buildSchematic(upperItems,lowerItems,vinVal,voutVal){
+  const cx=110,stub=13,rectW=22,rectH=32;
+  let y=28,parts=[];
+  parts.push(svgLine(cx,6,cx,y));
+  parts.push(svgText(cx,16,'Vin = '+formatVoltage(vinVal),{weight:'bold',size:11,color:'#355c7d'}));
+
+  function drawChain(items){
+    items.forEach(item=>{
+      parts.push(svgLine(cx,y,cx,y+stub)); y+=stub;
+      parts.push(svgRect(cx-rectW/2,y,rectW,rectH));
+      parts.push(svgText(cx+rectW/2+8,y+rectH/2-3,item.label,{anchor:'start',size:10,weight:'bold',color:'#355c7d'}));
+      parts.push(svgText(cx+rectW/2+8,y+rectH/2+11,formatResistance(item.ohms),{anchor:'start',size:10,color:'#555'}));
+      y+=rectH;
+    });
+  }
+
+  drawChain(upperItems);
+  parts.push(svgLine(cx,y,cx,y+stub)); y+=stub;
+  const nodeY=y;
+  parts.push(`<circle cx="${cx}" cy="${nodeY}" r="3" fill="#355c7d"/>`);
+  parts.push(svgLine(cx,nodeY,cx+72,nodeY));
+  parts.push(svgText(cx+78,nodeY-3,'Vout',{anchor:'start',size:10,weight:'bold',color:'#355c7d'}));
+  parts.push(svgText(cx+78,nodeY+11,formatVoltage(voutVal),{anchor:'start',size:10,color:'#555'}));
+  parts.push(svgLine(cx,nodeY,cx,nodeY+stub)); y=nodeY+stub;
+
+  drawChain(lowerItems);
+  parts.push(svgGnd(cx,y)); y+=24;
+
+  const totalH=y+8;
+  schematicWrap.innerHTML=`<svg viewBox="0 0 300 ${totalH}" width="100%" style="max-width:320px;display:block">${parts.join('')}</svg>`;
+}
+
 function calculate(){
   const hv=modeHV.checked;
   let upperOhms,lowerOhms,upperItems,lowerItems;
@@ -184,6 +240,7 @@ function calculate(){
 
   renderAnalysis(upperAnalysis,upperItems,current);
   renderAnalysis(lowerAnalysis,lowerItems,current);
+  buildSchematic(upperItems,lowerItems,vin,vout);
 
   setStatus('OK','ok');
 }
