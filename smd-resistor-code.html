@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SMD Resistor Code Calculator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="topnav"><a href="index.html">&larr; Home</a></div>
+
+  <header>
+    <h1>SMD Resistor Code Calculator</h1>
+    <p class="subtitle">Decode 3-digit, 4-digit, R-notation, and EIA-96 SMD resistor markings</p>
+  </header>
+
+  <div class="main-grid">
+    <div class="left-col">
+      <div class="card">
+        <h2>Enter Code</h2>
+        <label for="codeInput">Marking printed on the resistor</label>
+        <input id="codeInput" type="text" placeholder="e.g. 472, 4702, 4R7, 01A" autocomplete="off">
+        <p class="eq-line" style="margin-top:8px">Updates live as you type — no button needed.</p>
+      </div>
+
+      <div class="card">
+        <h2>Format Reference</h2>
+        <div class="analysis-item"><span class="a-label">3-digit</span><span class="a-values">First 2 = value, 3rd = ×10 exponent</span></div>
+        <div class="analysis-item"><span class="a-label">4-digit</span><span class="a-values">First 3 = value, 4th = ×10 exponent</span></div>
+        <div class="analysis-item"><span class="a-label">R-notation</span><span class="a-values">R = decimal point (4R7 = 4.7Ω)</span></div>
+        <div class="analysis-item"><span class="a-label">EIA-96</span><span class="a-values">2 digits (lookup table) + 1 letter (multiplier)</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Result</h2>
+      <div class="results-grid">
+        <div class="result-item wide"><span>Detected Format</span><h3 id="fmt">--</h3></div>
+        <div class="result-item wide"><span>Resistance Value</span><h3 id="ohms">--</h3></div>
+        <div class="result-item wide"><span>Status</span><h3 id="status">Type a code above</h3></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="site-footer">
+    <p class="footnote">EIA-96 tolerance is not encoded by the multiplier letter — check the resistor's separate tolerance band/marking if critical.</p>
+  </div>
+</div>
+
+<script>
+const codeInput=document.getElementById('codeInput');
+const fmtEl=document.getElementById('fmt'),ohmsEl=document.getElementById('ohms');
+const statusEl=document.getElementById('status'),statusItem=statusEl.closest('.result-item');
+
+function formatResistance(o){
+  if(!isFinite(o))return'--';
+  if(o>=1e6)return(o/1e6).toFixed(3).replace(/\.?0+$/,'')+' MΩ';
+  if(o>=1e3)return(o/1e3).toFixed(3).replace(/\.?0+$/,'')+' kΩ';
+  return o.toFixed(3).replace(/\.?0+$/,'')+' Ω';
+}
+function setStatus(t,k){statusEl.textContent=t;statusItem.classList.remove('status-ok','status-error');if(k)statusItem.classList.add('status-'+k);}
+
+// EIA-96 significant-figure table (code -> value*100)
+const EIA96={1:100,2:102,3:105,4:107,5:110,6:113,7:115,8:118,9:121,10:124,
+11:127,12:130,13:133,14:137,15:140,16:143,17:147,18:150,19:154,20:158,
+21:162,22:165,23:169,24:174,25:178,26:182,27:187,28:191,29:196,30:200,
+31:205,32:210,33:215,34:221,35:226,36:232,37:237,38:243,39:249,40:255,
+41:261,42:267,43:274,44:280,45:287,46:294,47:301,48:309,49:316,50:324,
+51:332,52:340,53:348,54:357,55:365,56:374,57:383,58:392,59:402,60:412,
+61:422,62:432,63:442,64:453,65:464,66:475,67:487,68:499,69:511,70:523,
+71:536,72:549,73:562,74:576,75:590,76:604,77:619,78:634,79:649,80:665,
+81:681,82:698,83:715,84:732,85:750,86:768,87:787,88:806,89:825,90:845,
+91:866,92:887,93:909,94:931,95:953,96:976};
+const EIA96_MULT={Z:0.001,Y:0.01,R:0.01,X:0.1,S:0.1,A:1,B:10,H:10,C:100,D:1000,E:10000,F:100000};
+
+function decodeSMD(raw){
+  const s=raw.trim().toUpperCase();
+  if(!s) return null;
+
+  // R-notation: exactly one R among digits (decimal marker), e.g. 4R7, R47, 1R0
+  if(/^[0-9]*R[0-9]*$/.test(s) && s!=='R' && /[0-9]/.test(s)){
+    const val=parseFloat(s.replace('R','.'));
+    if(isFinite(val)) return {fmt:'R-notation (direct decimal)', ohms:val};
+  }
+
+  // EIA-96: two digits + one letter
+  if(/^[0-9]{2}[A-Z]$/.test(s)){
+    const code=parseInt(s.slice(0,2),10);
+    const letter=s[2];
+    if(EIA96[code] && EIA96_MULT[letter]!==undefined){
+      const sig=EIA96[code]/100;
+      return {fmt:'EIA-96 code', ohms:sig*EIA96_MULT[letter]};
+    }
+  }
+
+  // plain 3-digit
+  if(/^[0-9]{3}$/.test(s)){
+    const sig=parseInt(s.slice(0,2),10),mult=parseInt(s[2],10);
+    return {fmt:'3-digit code (5% typical)', ohms:sig*Math.pow(10,mult)};
+  }
+
+  // plain 4-digit
+  if(/^[0-9]{4}$/.test(s)){
+    const sig=parseInt(s.slice(0,3),10),mult=parseInt(s[3],10);
+    return {fmt:'4-digit code (1% typical)', ohms:sig*Math.pow(10,mult)};
+  }
+
+  return null;
+}
+
+function update(){
+  const raw=codeInput.value;
+  if(!raw.trim()){ fmtEl.textContent='--'; ohmsEl.textContent='--'; setStatus('Type a code above'); return; }
+  const result=decodeSMD(raw);
+  if(!result){ fmtEl.textContent='--'; ohmsEl.textContent='--'; setStatus('Unrecognized format','error'); return; }
+  fmtEl.textContent=result.fmt;
+  ohmsEl.textContent=formatResistance(result.ohms);
+  setStatus('OK','ok');
+}
+codeInput.addEventListener('input',update);
+</script>
+</body>
+</html>
