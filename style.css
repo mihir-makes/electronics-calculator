@@ -104,6 +104,13 @@ hr{border:none;border-top:1px solid #ddd;margin:10px 0}
 .site-footer .credit{color:#607080}
 .site-footer .credit b{color:#355c7d}
 
+/* reference tables */
+.ref-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px}
+.ref-table:last-child{margin-bottom:0}
+.ref-table th,.ref-table td{padding:6px 8px;text-align:left;border-bottom:1px solid #e3edf2}
+.ref-table th{color:#355c7d;background:#f8fbfd;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+.ref-table td:first-child{font-weight:bold;color:#355c7d;white-space:nowrap}
+
 @media(max-width:900px){
 .main-grid{grid-template-columns:1fr}
 }
