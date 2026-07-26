@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Modbus RTU Frame Analyzer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="topnav"><a href="index.html">&larr; Home</a></div>
+
+  <header>
+    <h1>Modbus RTU Frame Analyzer</h1>
+    <p class="subtitle">Paste a raw RTU frame — decode slave ID, function, fields, and verify CRC</p>
+  </header>
+
+  <div class="main-grid">
+    <div class="left-col">
+      <div class="card">
+        <h2>Frame Bytes</h2>
+        <label for="frameInput">Hex bytes (spaces, commas, or 0x prefixes all fine)</label>
+        <input id="frameInput" type="text" placeholder="e.g. 01 03 00 00 00 0A C5 CD" autocomplete="off">
+        <p class="eq-line" style="margin-top:8px">Updates live as you type — no button needed.</p>
+      </div>
+
+      <div class="card">
+        <h2>Quick Examples</h2>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button type="button" class="ex-btn" data-frame="01 03 00 00 00 0A C5 CD">Read Holding Registers — Request</button>
+          <button type="button" class="ex-btn" data-frame="01 03 04 00 64 00 C8 BA 7A">Read Holding Registers — Response</button>
+          <button type="button" class="ex-btn" data-frame="11 06 00 01 00 03 9A 9B">Write Single Register — Echo</button>
+          <button type="button" class="ex-btn" data-frame="11 10 00 01 00 02 04 00 0A 01 02 C6 F0">Write Multiple Registers — Request</button>
+          <button type="button" class="ex-btn" data-frame="01 83 02 C0 F1">Exception Response</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Frame Overview</h2>
+      <div class="results-grid">
+        <div class="result-item"><span>Slave ID</span><h3 id="slaveId">--</h3></div>
+        <div class="result-item"><span>Function Code</span><h3 id="funcCode">--</h3></div>
+        <div class="result-item wide"><span>Direction</span><h3 id="direction">--</h3></div>
+        <div class="result-item wide"><span>CRC Check</span><h3 id="crcCheck">--</h3></div>
+        <div class="result-item wide"><span>Status</span><h3 id="status">Paste a frame above</h3></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card schematic-card">
+    <h2>Decoded Fields</h2>
+    <div id="fieldsTable"><p class="schematic-empty">No frame decoded yet.</p></div>
+
+    <h2 style="margin-top:16px">Raw Byte Breakdown</h2>
+    <div id="byteTable" class="resistor-scroll" style="max-height:200px"><p class="schematic-empty">No frame decoded yet.</p></div>
+  </div>
+
+  <div class="site-footer">
+    <p class="footnote">Write Single Coil (FC05) and Write Single Register (FC06) requests and responses are byte-identical — direction cannot be determined from the frame alone.</p>
+  </div>
+</div>
+
+<script>
+const frameInput=document.getElementById('frameInput');
+const slaveIdEl=document.getElementById('slaveId'),funcCodeEl=document.getElementById('funcCode');
+const directionEl=document.getElementById('direction'),crcCheckEl=document.getElementById('crcCheck');
+const statusEl=document.getElementById('status'),statusItem=statusEl.closest('.result-item');
+const crcItem=crcCheckEl.closest('.result-item');
+const fieldsTable=document.getElementById('fieldsTable'),byteTable=document.getElementById('byteTable');
+
+const FUNC_NAMES={1:'Read Coils',2:'Read Discrete Inputs',3:'Read Holding Registers',4:'Read Input Registers',
+  5:'Write Single Coil',6:'Write Single Register',15:'Write Multiple Coils',16:'Write Multiple Registers',
+  22:'Mask Write Register',23:'Read/Write Multiple Registers'};
+const EXC_NAMES={1:'Illegal Function',2:'Illegal Data Address',3:'Illegal Data Value',4:'Slave Device Failure',
+  5:'Acknowledge',6:'Slave Device Busy',8:'Memory Parity Error',10:'Gateway Path Unavailable',11:'Gateway Target Device Failed to Respond'};
+
+function hex2(n){return '0x'+n.toString(16).padStart(2,'0').toUpperCase();}
+function hex4(n){return '0x'+n.toString(16).padStart(4,'0').toUpperCase();}
+
+function modbusCRC16(bytes){
+  let crc=0xFFFF;
+  for(let pos=0;pos<bytes.length;pos++){
+    crc^=bytes[pos];
+    for(let i=0;i<8;i++){
+      if(crc&1){crc>>=1;crc^=0xA001;}else{crc>>=1;}
+    }
+  }
+  return crc;
+}
+
+function parseHex(str){
+  const cleaned=str.replace(/0x/gi,'').replace(/[^0-9a-fA-F]/g,'');
+  if(cleaned.length===0) return null;
+  if(cleaned.length%2!==0) return {error:'Odd number of hex digits — incomplete byte'};
+  const bytes=[];
+  for(let i=0;i<cleaned.length;i+=2) bytes.push(parseInt(cleaned.substr(i,2),16));
+  return {bytes};
+}
+
+function setStatus(t,k){statusEl.textContent=t;statusItem.classList.remove('status-ok','status-error','status-warn');if(k)statusItem.classList.add('status-'+k);}
+function setCrc(t,k){crcCheckEl.textContent=t;crcItem.classList.remove('status-ok','status-error');if(k)crcItem.classList.add('status-'+k);}
+
+function decodeFrame(bytes){
+  if(bytes.length<4) return {error:'Frame too short (need at least 4 bytes: ID + Func + CRC lo/hi)'};
+
+  const slaveId=bytes[0];
+  const funcRaw=bytes[1];
+  const isException=(funcRaw & 0x80)!==0;
+  const func=funcRaw & 0x7F;
+
+  const dataForCrc=bytes.slice(0,bytes.length-2);
+  const crc=modbusCRC16(dataForCrc);
+  const crcLoCalc=crc & 0xFF, crcHiCalc=(crc>>8)&0xFF;
+  const crcLoFrame=bytes[bytes.length-2], crcHiFrame=bytes[bytes.length-1];
+  const crcValid=(crcLoCalc===crcLoFrame && crcHiCalc===crcHiFrame);
+
+  let direction='Unknown', fields=[];
+  const len=bytes.length;
+
+  if(isException){
+    direction='Exception Response';
+    const excCode=bytes[2];
+    fields.push(['Exception Code', hex2(excCode)+' — '+(EXC_NAMES[excCode]||'Unknown/vendor-specific')]);
+  } else if(func===1||func===2||func===3||func===4){
+    if(len===8){
+      direction='Request';
+      const startAddr=(bytes[2]<<8)|bytes[3], qty=(bytes[4]<<8)|bytes[5];
+      fields.push(['Starting Address', hex4(startAddr)+' ('+startAddr+')']);
+      fields.push(['Quantity', qty]);
+    } else if(len>=5){
+      direction='Response';
+      const byteCount=bytes[2];
+      const data=bytes.slice(3,3+byteCount);
+      fields.push(['Byte Count', byteCount]);
+      if(func===3||func===4){
+        const regs=[];
+        for(let i=0;i<data.length;i+=2){
+          const val=(data[i]<<8)|(data[i+1]||0);
+          regs.push(hex4(val)+' ('+val+')');
+        }
+        fields.push(['Register Values', regs.join(', ') || '--']);
+      } else {
+        fields.push(['Data Bytes (bit-packed)', data.map(b=>b.toString(2).padStart(8,'0')).join(' ') || '--']);
+      }
+    }
+  } else if(func===5||func===6){
+    direction='Request or Response (ambiguous — see note below)';
+    const addr=(bytes[2]<<8)|bytes[3], val=(bytes[4]<<8)|bytes[5];
+    fields.push(['Address', hex4(addr)+' ('+addr+')']);
+    fields.push(['Value', hex4(val)+' ('+val+')']);
+  } else if(func===15||func===16){
+    if(len===8){
+      direction='Response';
+      const startAddr=(bytes[2]<<8)|bytes[3], qty=(bytes[4]<<8)|bytes[5];
+      fields.push(['Starting Address', hex4(startAddr)+' ('+startAddr+')']);
+      fields.push(['Quantity', qty]);
+    } else if(len>=7){
+      direction='Request';
+      const startAddr=(bytes[2]<<8)|bytes[3], qty=(bytes[4]<<8)|bytes[5];
+      const byteCount=bytes[6];
+      const data=bytes.slice(7,7+byteCount);
+      fields.push(['Starting Address', hex4(startAddr)+' ('+startAddr+')']);
+      fields.push(['Quantity', qty]);
+      fields.push(['Byte Count', byteCount]);
+      if(func===16){
+        const regs=[];
+        for(let i=0;i<data.length;i+=2){
+          const val=(data[i]<<8)|(data[i+1]||0);
+          regs.push(hex4(val)+' ('+val+')');
+        }
+        fields.push(['Register Values', regs.join(', ') || '--']);
+      } else {
+        fields.push(['Data Bytes (bit-packed)', data.map(b=>b.toString(2).padStart(8,'0')).join(' ') || '--']);
+      }
+    }
+  } else {
+    direction='Unrecognized function code';
+  }
+
+  return {slaveId,func,funcRaw,funcName:isException?'Exception':(FUNC_NAMES[func]||'Unknown/custom'),isException,direction,fields,crcValid,crcCalc:[crcLoCalc,crcHiCalc],crcFrame:[crcLoFrame,crcHiFrame]};
+}
+
+function renderByteTable(bytes){
+  let rows='<table class="ref-table"><tr><th>#</th><th>Hex</th><th>Dec</th></tr>';
+  bytes.forEach((b,i)=>{
+    rows+=`<tr><td>${i}</td><td>${hex2(b)}</td><td>${b}</td></tr>`;
+  });
+  rows+='</table>';
+  byteTable.innerHTML=rows;
+}
+
+function renderFields(fields){
+  if(!fields.length){ fieldsTable.innerHTML='<p class="schematic-empty">No decodable fields for this frame type.</p>'; return; }
+  let rows='<table class="ref-table"><tr><th>Field</th><th>Value</th></tr>';
+  fields.forEach(([name,val])=>{ rows+=`<tr><td>${name}</td><td>${val}</td></tr>`; });
+  rows+='</table>';
+  fieldsTable.innerHTML=rows;
+}
+
+function update(){
+  const raw=frameInput.value;
+  if(!raw.trim()){
+    slaveIdEl.textContent='--';funcCodeEl.textContent='--';directionEl.textContent='--';
+    setCrc('--');setStatus('Paste a frame above');
+    fieldsTable.innerHTML='<p class="schematic-empty">No frame decoded yet.</p>';
+    byteTable.innerHTML='<p class="schematic-empty">No frame decoded yet.</p>';
+    return;
+  }
+  const parsed=parseHex(raw);
+  if(!parsed || parsed.error){
+    setStatus(parsed && parsed.error ? parsed.error : 'Could not parse input','error');
+    return;
+  }
+  const bytes=parsed.bytes;
+  const result=decodeFrame(bytes);
+  if(result.error){
+    slaveIdEl.textContent='--';funcCodeEl.textContent='--';directionEl.textContent='--';
+    setCrc('--'); setStatus(result.error,'error');
+    renderByteTable(bytes);
+    fieldsTable.innerHTML='<p class="schematic-empty">Frame too short to decode fields.</p>';
+    return;
+  }
+
+  slaveIdEl.textContent=hex2(result.slaveId)+' ('+result.slaveId+')';
+  funcCodeEl.textContent=hex2(result.funcRaw)+' — '+result.funcName;
+  directionEl.textContent=result.direction;
+
+  if(result.crcValid){
+    setCrc('Valid — '+hex2(result.crcFrame[0])+' '+hex2(result.crcFrame[1]),'ok');
+  } else {
+    setCrc('MISMATCH — frame has '+hex2(result.crcFrame[0])+' '+hex2(result.crcFrame[1])+', expected '+hex2(result.crcCalc[0])+' '+hex2(result.crcCalc[1]),'error');
+  }
+
+  renderFields(result.fields);
+  renderByteTable(bytes);
+
+  setStatus(result.crcValid ? 'OK' : 'CRC mismatch — check the raw bytes', result.crcValid ? 'ok' : 'error');
+}
+
+frameInput.addEventListener('input',update);
+document.querySelectorAll('.ex-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{ frameInput.value=btn.dataset.frame; update(); });
+});
+</script>
+</body>
+</html>
