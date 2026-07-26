@@ -111,6 +111,10 @@ hr{border:none;border-top:1px solid #ddd;margin:10px 0}
 .ref-table th{color:#355c7d;background:#f8fbfd;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
 .ref-table td:first-child{font-weight:bold;color:#355c7d;white-space:nowrap}
 
+/* modbus example buttons */
+.ex-btn{text-align:left;background:#f8fbfd;border:1px solid #cfd8dc;font-family:'Courier New',monospace;font-size:11px;font-weight:normal}
+.ex-btn:hover{background:#eef4f8;border-color:#a9c3d6}
+
 @media(max-width:900px){
 .main-grid{grid-template-columns:1fr}
 }
