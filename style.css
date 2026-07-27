@@ -115,6 +115,8 @@ hr{border:none;border-top:1px solid #ddd;margin:10px 0}
 .ex-btn{text-align:left;background:#f8fbfd;border:1px solid #cfd8dc;font-family:'Courier New',monospace;font-size:11px;font-weight:normal}
 .ex-btn:hover{background:#eef4f8;border-color:#a9c3d6}
 
+.frame-textarea{width:100%;min-height:110px;padding:10px;border:1px solid #cfd8dc;border-radius:8px;font-size:13px;font-family:'Courier New',monospace;resize:vertical;line-height:1.5}
+
 @media(max-width:900px){
 .main-grid{grid-template-columns:1fr}
 }
