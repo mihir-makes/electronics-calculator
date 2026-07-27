@@ -1,9 +1,9 @@
-<!DOCTYPE html>  <!only bytes in this ->
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Modbus RTU Frame Analyzer Rx/Tx</title>
+<title>Modbus RTU Frame Analyzer</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -13,16 +13,16 @@
 
   <header>
     <h1>Modbus RTU Frame Analyzer</h1>
-    <p class="subtitle">Paste a raw RTU frame: decode slave ID, function, fields, and verify CRC</p>
+    <p class="subtitle">Paste a raw RTU frame — decode slave ID, function, fields, and verify CRC</p>
   </header>
 
   <div class="main-grid">
     <div class="left-col">
       <div class="card">
         <h2>Frame Bytes</h2>
-        <label for="frameInput">Hex bytes (spaces, commas, or 0x prefixes all fine)</label>
-        <input id="frameInput" type="text" placeholder="e.g. 01 03 00 00 00 0A C5 CD" autocomplete="off">
-        <p class="eq-line" style="margin-top:8px">Updates live as you type - no button needed.</p>
+        <label for="frameInput">Hex bytes (spaces, commas, or 0x prefixes all fine — paste multi-line captures too)</label>
+        <textarea id="frameInput" class="frame-textarea" placeholder="e.g. 01 03 00 00 00 0A C5 CD" autocomplete="off"></textarea>
+        <p class="eq-line" style="margin-top:8px">Updates live as you type — no button needed.</p>
       </div>
 
       <div class="card">
@@ -50,11 +50,8 @@
   </div>
 
   <div class="card schematic-card">
-    <h2>Decoded Fields</h2>
+    <h2>Frame Breakdown</h2>
     <div id="fieldsTable"><p class="schematic-empty">No frame decoded yet.</p></div>
-
-    <h2 style="margin-top:16px">Raw Byte Breakdown</h2>
-    <div id="byteTable" class="resistor-scroll" style="max-height:200px"><p class="schematic-empty">No frame decoded yet.</p></div>
   </div>
 
   <div class="site-footer">
@@ -68,7 +65,7 @@ const slaveIdEl=document.getElementById('slaveId'),funcCodeEl=document.getElemen
 const directionEl=document.getElementById('direction'),crcCheckEl=document.getElementById('crcCheck');
 const statusEl=document.getElementById('status'),statusItem=statusEl.closest('.result-item');
 const crcItem=crcCheckEl.closest('.result-item');
-const fieldsTable=document.getElementById('fieldsTable'),byteTable=document.getElementById('byteTable');
+const fieldsTable=document.getElementById('fieldsTable');
 
 const FUNC_NAMES={1:'Read Coils',2:'Read Discrete Inputs',3:'Read Holding Registers',4:'Read Input Registers',
   5:'Write Single Coil',6:'Write Single Register',15:'Write Multiple Coils',16:'Write Multiple Registers',
@@ -78,6 +75,7 @@ const EXC_NAMES={1:'Illegal Function',2:'Illegal Data Address',3:'Illegal Data V
 
 function hex2(n){return '0x'+n.toString(16).padStart(2,'0').toUpperCase();}
 function hex4(n){return '0x'+n.toString(16).padStart(4,'0').toUpperCase();}
+function bytesToHexStr(bytes){return bytes.map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');}
 
 function modbusCRC16(bytes){
   let crc=0xFFFF;
@@ -116,87 +114,84 @@ function decodeFrame(bytes){
   const crcLoFrame=bytes[bytes.length-2], crcHiFrame=bytes[bytes.length-1];
   const crcValid=(crcLoCalc===crcLoFrame && crcHiCalc===crcHiFrame);
 
-  let direction='Unknown', fields=[];
+  const rows=[];
+  rows.push({b:[bytes[0]], label:'Slave Address', value:hex2(slaveId)+' ('+slaveId+')'});
+  rows.push({b:[bytes[1]], label:'Function Code', value:hex2(funcRaw)+' ('+funcRaw+')'+(isException?' - Exception':' - '+(FUNC_NAMES[func]||'Unknown/custom'))});
+
+  let direction='Unknown';
   const len=bytes.length;
 
   if(isException){
     direction='Exception Response';
     const excCode=bytes[2];
-    fields.push(['Exception Code', hex2(excCode)+' — '+(EXC_NAMES[excCode]||'Unknown/vendor-specific')]);
+    rows.push({b:[bytes[2]], label:'Exception Code', value:hex2(excCode)+' ('+excCode+') - '+(EXC_NAMES[excCode]||'Unknown/vendor-specific')});
   } else if(func===1||func===2||func===3||func===4){
     if(len===8){
       direction='Request';
       const startAddr=(bytes[2]<<8)|bytes[3], qty=(bytes[4]<<8)|bytes[5];
-      fields.push(['Starting Address', hex4(startAddr)+' ('+startAddr+')']);
-      fields.push(['Quantity', qty]);
+      rows.push({b:bytes.slice(2,4), label:'Starting Address', value:hex4(startAddr)+' ('+startAddr+')'});
+      rows.push({b:bytes.slice(4,6), label:'Quantity', value:hex4(qty)+' ('+qty+')'});
     } else if(len>=5){
       direction='Response';
       const byteCount=bytes[2];
       const data=bytes.slice(3,3+byteCount);
-      fields.push(['Byte Count', byteCount]);
+      rows.push({b:[bytes[2]], label:'Byte Count', value:hex2(byteCount)+' ('+byteCount+')'});
       if(func===3||func===4){
         const regs=[];
         for(let i=0;i<data.length;i+=2){
           const val=(data[i]<<8)|(data[i+1]||0);
           regs.push(hex4(val)+' ('+val+')');
         }
-        fields.push(['Register Values', regs.join(', ') || '--']);
+        rows.push({b:data, label:'Register Value', value:regs.join(', ')||'--'});
       } else {
-        fields.push(['Data Bytes (bit-packed)', data.map(b=>b.toString(2).padStart(8,'0')).join(' ') || '--']);
+        rows.push({b:data, label:'Data (bit-packed)', value:data.map(b=>b.toString(2).padStart(8,'0')).join(' ')||'--'});
       }
     }
   } else if(func===5||func===6){
     direction='Request or Response (ambiguous — see note below)';
     const addr=(bytes[2]<<8)|bytes[3], val=(bytes[4]<<8)|bytes[5];
-    fields.push(['Address', hex4(addr)+' ('+addr+')']);
-    fields.push(['Value', hex4(val)+' ('+val+')']);
+    rows.push({b:bytes.slice(2,4), label:'Address', value:hex4(addr)+' ('+addr+')'});
+    rows.push({b:bytes.slice(4,6), label:'Value', value:hex4(val)+' ('+val+')'});
   } else if(func===15||func===16){
     if(len===8){
       direction='Response';
       const startAddr=(bytes[2]<<8)|bytes[3], qty=(bytes[4]<<8)|bytes[5];
-      fields.push(['Starting Address', hex4(startAddr)+' ('+startAddr+')']);
-      fields.push(['Quantity', qty]);
+      rows.push({b:bytes.slice(2,4), label:'Starting Address', value:hex4(startAddr)+' ('+startAddr+')'});
+      rows.push({b:bytes.slice(4,6), label:'Quantity', value:hex4(qty)+' ('+qty+')'});
     } else if(len>=7){
       direction='Request';
       const startAddr=(bytes[2]<<8)|bytes[3], qty=(bytes[4]<<8)|bytes[5];
       const byteCount=bytes[6];
       const data=bytes.slice(7,7+byteCount);
-      fields.push(['Starting Address', hex4(startAddr)+' ('+startAddr+')']);
-      fields.push(['Quantity', qty]);
-      fields.push(['Byte Count', byteCount]);
+      rows.push({b:bytes.slice(2,4), label:'Starting Address', value:hex4(startAddr)+' ('+startAddr+')'});
+      rows.push({b:bytes.slice(4,6), label:'Quantity', value:hex4(qty)+' ('+qty+')'});
+      rows.push({b:[bytes[6]], label:'Byte Count', value:hex2(byteCount)+' ('+byteCount+')'});
       if(func===16){
         const regs=[];
         for(let i=0;i<data.length;i+=2){
           const val=(data[i]<<8)|(data[i+1]||0);
           regs.push(hex4(val)+' ('+val+')');
         }
-        fields.push(['Register Values', regs.join(', ') || '--']);
+        rows.push({b:data, label:'Register Value', value:regs.join(', ')||'--'});
       } else {
-        fields.push(['Data Bytes (bit-packed)', data.map(b=>b.toString(2).padStart(8,'0')).join(' ') || '--']);
+        rows.push({b:data, label:'Data (bit-packed)', value:data.map(b=>b.toString(2).padStart(8,'0')).join(' ')||'--'});
       }
     }
   } else {
     direction='Unrecognized function code';
   }
 
-  return {slaveId,func,funcRaw,funcName:isException?'Exception':(FUNC_NAMES[func]||'Unknown/custom'),isException,direction,fields,crcValid,crcCalc:[crcLoCalc,crcHiCalc],crcFrame:[crcLoFrame,crcHiFrame]};
+  rows.push({b:[crcLoFrame,crcHiFrame], label:'CRC', value:hex4(crc)+' ('+crc+')'});
+
+  return {slaveId,func,funcRaw,funcName:isException?'Exception':(FUNC_NAMES[func]||'Unknown/custom'),isException,direction,rows,crcValid,crcCalc:[crcLoCalc,crcHiCalc],crcFrame:[crcLoFrame,crcHiFrame]};
 }
 
-function renderByteTable(bytes){
-  let rows='<table class="ref-table"><tr><th>#</th><th>Hex</th><th>Dec</th></tr>';
-  bytes.forEach((b,i)=>{
-    rows+=`<tr><td>${i}</td><td>${hex2(b)}</td><td>${b}</td></tr>`;
-  });
-  rows+='</table>';
-  byteTable.innerHTML=rows;
-}
-
-function renderFields(fields){
-  if(!fields.length){ fieldsTable.innerHTML='<p class="schematic-empty">No decodable fields for this frame type.</p>'; return; }
-  let rows='<table class="ref-table"><tr><th>Field</th><th>Value</th></tr>';
-  fields.forEach(([name,val])=>{ rows+=`<tr><td>${name}</td><td>${val}</td></tr>`; });
-  rows+='</table>';
-  fieldsTable.innerHTML=rows;
+function renderRows(rows){
+  if(!rows.length){ fieldsTable.innerHTML='<p class="schematic-empty">No decodable fields for this frame type.</p>'; return; }
+  let out='<table class="ref-table"><tr><th>Part of Data Package</th><th>Description</th><th>Value</th></tr>';
+  rows.forEach(r=>{ out+=`<tr><td>${bytesToHexStr(r.b)}</td><td>${r.label}</td><td>${r.value}</td></tr>`; });
+  out+='</table>';
+  fieldsTable.innerHTML=out;
 }
 
 function update(){
@@ -205,7 +200,6 @@ function update(){
     slaveIdEl.textContent='--';funcCodeEl.textContent='--';directionEl.textContent='--';
     setCrc('--');setStatus('Paste a frame above');
     fieldsTable.innerHTML='<p class="schematic-empty">No frame decoded yet.</p>';
-    byteTable.innerHTML='<p class="schematic-empty">No frame decoded yet.</p>';
     return;
   }
   const parsed=parseHex(raw);
@@ -218,7 +212,6 @@ function update(){
   if(result.error){
     slaveIdEl.textContent='--';funcCodeEl.textContent='--';directionEl.textContent='--';
     setCrc('--'); setStatus(result.error,'error');
-    renderByteTable(bytes);
     fieldsTable.innerHTML='<p class="schematic-empty">Frame too short to decode fields.</p>';
     return;
   }
@@ -233,8 +226,7 @@ function update(){
     setCrc('MISMATCH — frame has '+hex2(result.crcFrame[0])+' '+hex2(result.crcFrame[1])+', expected '+hex2(result.crcCalc[0])+' '+hex2(result.crcCalc[1]),'error');
   }
 
-  renderFields(result.fields);
-  renderByteTable(bytes);
+  renderRows(result.rows);
 
   setStatus(result.crcValid ? 'OK' : 'CRC mismatch — check the raw bytes', result.crcValid ? 'ok' : 'error');
 }
