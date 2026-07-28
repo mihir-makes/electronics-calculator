@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boost Converter Power Stage Calculator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="topnav"><a href="index.html">&larr; Home</a></div>
+
+  <header>
+    <h1>Boost Converter Power Stage Calculator</h1>
+    <p class="subtitle">Based on TI SLVA372 — duty cycle, ripple current, max switch current, inductor selection</p>
+  </header>
+
+  <div class="mode-toggle">
+    <input type="radio" name="mode" id="modeKnown" value="known" checked>
+    <label for="modeKnown">Known Inductor</label>
+    <input type="radio" name="mode" id="modeSelect" value="select">
+    <label for="modeSelect">Select Inductor</label>
+  </div>
+
+  <div class="main-grid">
+    <div class="left-col">
+
+      <div class="card">
+        <h2>Power Stage Parameters</h2>
+        <label for="vinMin">VIN(min) — Minimum Input Voltage (V)</label>
+        <input id="vinMin" type="number" step="any" placeholder="e.g. 8">
+
+        <label for="vinMax">VIN(max) — Maximum Input Voltage (V) <span style="font-weight:normal;color:#8a99a8">(reference only)</span></label>
+        <input id="vinMax" type="number" step="any" placeholder="e.g. 16">
+
+        <label for="vout">VOUT — Nominal Output Voltage (V)</label>
+        <input id="vout" type="number" step="any" placeholder="e.g. 24">
+
+        <label for="ioutMax">IOUT(max) — Maximum Output Current (A)</label>
+        <input id="ioutMax" type="number" step="any" placeholder="e.g. 2">
+
+        <label for="eta">Efficiency η (%)</label>
+        <input id="eta" type="number" step="any" value="80">
+
+        <label for="fs">Switching Frequency fS (kHz)</label>
+        <input id="fs" type="number" step="any" placeholder="e.g. 500">
+
+        <label for="ilim">ILIM(min) — IC's Minimum Current Limit (A)</label>
+        <input id="ilim" type="number" step="any" placeholder="From IC datasheet, e.g. 6">
+      </div>
+
+      <div id="knownSection" class="card">
+        <h2>Known Inductor</h2>
+        <label for="lKnown">Inductor Value L (µH)</label>
+        <input id="lKnown" type="number" step="any" placeholder="e.g. 10">
+      </div>
+
+      <div id="selectSection" class="card hidden">
+        <h2>Select Inductor</h2>
+        <label for="vinTyp">VIN (typical) for inductor calc (V)</label>
+        <input id="vinTyp" type="number" step="any" placeholder="e.g. 12">
+        <label for="rippleFactor">Ripple Current Factor (0.2 – 0.4 typical)</label>
+        <input id="rippleFactor" type="number" step="any" value="0.3">
+      </div>
+
+      <button type="button" id="calcBtn" class="calc-btn">Calculate</button>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <div class="results-grid">
+        <div class="result-item"><span>Duty Cycle D</span><h3 id="dutyCycle">--</h3></div>
+        <div class="result-item"><span>Inductor Ripple Current ΔIL</span><h3 id="rippleCurrent">--</h3></div>
+        <div class="result-item" id="suggestedLItem"><span>Suggested Inductor L</span><h3 id="suggestedL">--</h3></div>
+        <div class="result-item"><span>Max Deliverable Output Current</span><h3 id="imaxout">--</h3></div>
+        <div class="result-item wide"><span>Max Switch Current ISW(max) — peak rating for L, switch &amp; diode</span><h3 id="iswmax">--</h3></div>
+        <div class="result-item wide"><span>Status</span><h3 id="status">Waiting</h3></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="site-footer">
+    <p class="footnote">Formulas from Texas Instruments application note SLVA372 (Basic Calculation of a Boost Converter's Power Stage). Results are first-pass estimates — verify against the selected IC's datasheet before finalizing a design.</p>
+  </div>
+</div>
+
+<script>
+const modeKnown=document.getElementById('modeKnown'),modeSelect=document.getElementById('modeSelect');
+const knownSection=document.getElementById('knownSection'),selectSection=document.getElementById('selectSection');
+const suggestedLItem=document.getElementById('suggestedLItem');
+const calcBtn=document.getElementById('calcBtn');
+
+const dutyCycleEl=document.getElementById('dutyCycle'),rippleCurrentEl=document.getElementById('rippleCurrent');
+const suggestedLEl=document.getElementById('suggestedL'),imaxoutEl=document.getElementById('imaxout'),iswmaxEl=document.getElementById('iswmax');
+const statusEl=document.getElementById('status'),statusItem=statusEl.closest('.result-item');
+
+function setStatus(t,k){statusEl.textContent=t;statusItem.classList.remove('status-ok','status-error','status-warn');if(k)statusItem.classList.add('status-'+k);}
+function fmtA(a){if(!isFinite(a))return'--';return a.toFixed(3).replace(/\.?0+$/,'')+' A';}
+function fmtPct(x){if(!isFinite(x))return'--';return (x*100).toFixed(2).replace(/\.?0+$/,'')+' %';}
+function fmtL(h){if(!isFinite(h))return'--';return h.toFixed(3).replace(/\.?0+$/,'')+' µH';}
+
+function refreshMode(){
+  const sel=modeSelect.checked;
+  knownSection.classList.toggle('hidden',sel);
+  selectSection.classList.toggle('hidden',!sel);
+  suggestedLItem.classList.toggle('hidden',!sel);
+}
+modeKnown.addEventListener('change',refreshMode);
+modeSelect.addEventListener('change',refreshMode);
+
+function calculate(){
+  const vinMin=parseFloat(document.getElementById('vinMin').value);
+  const vout=parseFloat(document.getElementById('vout').value);
+  const ioutMax=parseFloat(document.getElementById('ioutMax').value);
+  const etaPct=parseFloat(document.getElementById('eta').value);
+  const fsKHz=parseFloat(document.getElementById('fs').value);
+  const ilim=parseFloat(document.getElementById('ilim').value);
+
+  if(![vinMin,vout,ioutMax,etaPct,fsKHz,ilim].every(n=>isFinite(n)&&!isNaN(n)) || vinMin<=0||vout<=0||ioutMax<=0||fsKHz<=0||ilim<=0){
+    setStatus('Enter valid values for all Power Stage Parameters','error');
+    return;
+  }
+  const eta=etaPct/100;
+  const fs=fsKHz*1000; // Hz
+
+  // Eq 1: Duty Cycle
+  const D=1-(vinMin*eta)/vout;
+  if(!(D>0 && D<1)){
+    dutyCycleEl.textContent=fmtPct(D);
+    setStatus('Invalid design: D must be between 0% and 100% — check VIN(min), VOUT, η','error');
+    return;
+  }
+  dutyCycleEl.textContent=fmtPct(D);
+
+  let dIL, Lvalue=null;
+
+  if(modeSelect.checked){
+    const vinTyp=parseFloat(document.getElementById('vinTyp').value);
+    const rippleFactor=parseFloat(document.getElementById('rippleFactor').value);
+    if(!isFinite(vinTyp)||vinTyp<=0||!isFinite(rippleFactor)||rippleFactor<=0){
+      setStatus('Enter valid VIN(typical) and Ripple Current Factor','error');
+      return;
+    }
+    // Eq 6: estimated ripple current
+    dIL = rippleFactor * ioutMax * (vout/vinTyp);
+    // Eq 5: inductor value (H), convert to µH
+    const L_H = (vinTyp*(vout-vinTyp)) / (dIL*fs*vout);
+    Lvalue = L_H*1e6;
+    suggestedLEl.textContent = fmtL(Lvalue);
+  } else {
+    const L_uH=parseFloat(document.getElementById('lKnown').value);
+    if(!isFinite(L_uH)||L_uH<=0){
+      setStatus('Enter a valid Inductor Value L','error');
+      return;
+    }
+    const L_H=L_uH*1e-6;
+    // Eq 2: ripple current
+    dIL = (vinMin*D) / (fs*L_H);
+  }
+
+  rippleCurrentEl.textContent=fmtA(dIL);
+
+  // Eq 3: max output current the IC can deliver
+  const Imaxout = (ilim - dIL/2) * (1-D);
+  imaxoutEl.textContent=fmtA(Imaxout);
+
+  // Eq 4: max/peak switch current
+  const Iswmax = ioutMax/(1-D) + dIL/2;
+  iswmaxEl.textContent=fmtA(Iswmax);
+
+  if(Imaxout>=ioutMax){
+    setStatus('IC/inductor OK — can deliver required '+fmtA(ioutMax),'ok');
+  } else {
+    setStatus('IC insufficient — max deliverable is '+fmtA(Imaxout)+', need '+fmtA(ioutMax)+'. Use a higher ILIM(min) IC or increase inductance.','warn');
+  }
+}
+
+calcBtn.addEventListener('click',calculate);
+refreshMode();
+</script>
+</body>
+</html>
