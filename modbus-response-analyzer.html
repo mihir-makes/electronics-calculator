@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Modbus Response Analyzer - Electronics Toolkit</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
+<link rel="stylesheet" href="style.css">
+<style>
+/* page-specific additions for the register decode builder */
+.decode-entry{display:grid;grid-template-columns:74px 1fr 56px 1fr 34px;gap:8px;align-items:center;margin-bottom:6px;background:#f8fbfd;border:1px solid #e3edf2;border-radius:8px;padding:6px 8px}
+.decode-entry select{padding:6px;border:1px solid #cfd8dc;border-radius:6px;font-size:12px;width:100%}
+.reg-label{font-weight:bold;color:#355c7d;font-size:12px;text-align:center;white-space:nowrap}
+.updown-group{display:flex;flex-direction:column;gap:2px}
+.updown-group button{padding:1px 6px;font-size:10px;line-height:1.4;background:#eef4f8;border:1px solid #cfd8dc;border-radius:4px;cursor:pointer}
+.updown-group button:hover{background:#dce8f0}
+.updown-group button:disabled{opacity:.35;cursor:not-allowed}
+.decode-value{font-weight:bold;color:#2c3e50;font-size:13px;text-align:right;word-break:break-all}
+.decode-value.err{color:#c0392b}
+.add-entry-btn{margin-top:10px;width:100%}
+.entries-scroll{max-height:280px;overflow-y:auto;padding-right:4px}
+.link-btn{background:none;border:none;color:#355c7d;font-weight:bold;text-decoration:underline;cursor:pointer;padding:0;font-size:12px}
+@media(max-width:640px){
+  .decode-entry{grid-template-columns:60px 1fr 34px;grid-template-areas:"lbl lbl lbl" "fmt fmt fmt" "ud val rm";row-gap:6px}
+  .decode-entry .reg-label{grid-area:lbl}
+  .decode-entry select{grid-area:fmt}
+  .decode-entry .updown-group{grid-area:ud;flex-direction:row}
+  .decode-entry .decode-value{grid-area:val}
+  .decode-entry .remove-btn{grid-area:rm}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="topnav"><a href="index.html">&larr; Back to Toolkit</a></div>
+
+  <header>
+    <h1>Modbus Response Analyzer</h1>
+    <p class="subtitle">Decode raw register data into signed/unsigned/hex/ASCII/binary or wide 32 &amp; 64-bit values</p>
+  </header>
+
+  <div class="main-grid">
+    <div class="left-col">
+
+      <div class="card">
+        <h2>Response Data</h2>
+        <label>Raw Bytes / Register Values (hex)</label>
+        <textarea id="rawInput" class="frame-textarea" placeholder="e.g. 41 20 00 00 42 48 00 00   or   4120 0000 4248 0000"></textarea>
+        <div class="eq-line">
+          Paste raw bytes (2 hex digits each) or full register words (4 hex digits each) &mdash; space, comma, or 0x separated.
+          <button class="link-btn" onclick="loadExample()">Load example</button>
+        </div>
+
+        <label>Byte Order (within each register)</label>
+        <label class="radio-label"><input type="radio" name="byteOrder" value="big" checked> Big endian (AB) &mdash; first byte is the high byte</label>
+        <label class="radio-label"><input type="radio" name="byteOrder" value="little"> Little endian (BA) &mdash; first byte is the low byte</label>
+
+        <label>Word Order (for 32/64-bit groups)</label>
+        <label class="radio-label"><input type="radio" name="wordOrder" value="big" checked> High word first (standard)</label>
+        <label class="radio-label"><input type="radio" name="wordOrder" value="little"> Low word first (word-swapped)</label>
+
+        <button class="calc-btn" onclick="decodeRegisters()">Decode Registers</button>
+        <div class="eq-line" id="parseStatus" style="margin-top:8px"></div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <h2>Parsed Registers</h2>
+      <table class="ref-table">
+        <thead><tr><th>#</th><th>Hex</th><th>Unsigned</th><th>Signed</th></tr></thead>
+        <tbody id="regTableBody"><tr><td colspan="4">No data parsed yet.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Decoded Values</h2>
+    <div class="eq-line">Pick a start register and a format for each value. Use &#9650;&#9660; to shift the window up or down &mdash; e.g. sliding a 32-bit float across a register boundary, or grouping 4 registers for a 64-bit value.</div>
+    <div class="entries-scroll" id="entriesList"></div>
+    <button class="add-entry-btn" onclick="addEntry()">+ Add Decoded Value</button>
+  </div>
+
+  <div class="site-footer">
+    <p class="credit">by mihir patel, an <b>INDIAN</b> Electrical Engineer tyring hands on some basics of Engineering &nbsp;|&nbsp; Rev 1.0 "Reference Electronic Calculators"</p>
+  </div>
+</div>
+
+<script>
+const FORMAT_LEN = {s16:1,u16:1,hex:1,ascii:1,bin:1,s32:2,u32:2,s64:4,u64:4,f32:2,f64:4};
+const FORMAT_LABEL = {
+  s16:'Signed', u16:'Unsigned', hex:'Hex', ascii:'ASCII - Hex', bin:'Binary',
+  s32:'32-bit Signed', u32:'32-bit Unsigned', s64:'64-bit Signed', u64:'64-bit Unsigned',
+  f32:'32-bit Float', f64:'64-bit Double'
+};
+const FORMAT_GROUPS = [['s16','u16','hex','ascii','bin'],['s32','u32','s64','u64'],['f32','f64']];
+
+let registers = [];
+let entries = [];
+let entryIdCounter = 0;
+let wordOrderGlobal = 'big';
+
+function loadExample(){
+  document.getElementById('rawInput').value = '41 20 00 00 42 48 00 00';
+}
+
+function parseTokensToBytes(input){
+  const cleaned = input.trim();
+  if(!cleaned) return [];
+  const tokens = cleaned.split(/[\s,;]+/).filter(Boolean).map(t=>t.replace(/^0x/i,''));
+  const bytes = [];
+  tokens.forEach(tok=>{
+    let t = tok.replace(/[^0-9a-fA-F]/g,'');
+    if(!t) return;
+    if(t.length % 2 !== 0) t = '0'+t;
+    for(let i=0;i<t.length;i+=2) bytes.push(t.substr(i,2));
+  });
+  return bytes;
+}
+
+function buildRegisters(bytes, byteOrder){
+  const regs = [];
+  for(let i=0;i+1<bytes.length;i+=2){
+    const b0=bytes[i], b1=bytes[i+1];
+    const hex = (byteOrder==='big') ? (b0+b1) : (b1+b0);
+    regs.push(hex.toUpperCase());
+  }
+  return regs;
+}
+
+function combineHex(regsSlice, wordOrder){
+  const ordered = wordOrder==='big' ? regsSlice : regsSlice.slice().reverse();
+  return ordered.join('');
+}
+
+function trimFloat(v){
+  let s = v.toPrecision(9);
+  if(s.includes('.')) s = s.replace(/0+$/,'').replace(/\.$/,'');
+  return s;
+}
+
+function decodeValue(startIdx, len, fmt){
+  if(startIdx<0 || startIdx+len>registers.length) return {error:true, text:'Out of range'};
+  const slice = registers.slice(startIdx, startIdx+len);
+  const hex = combineHex(slice, wordOrderGlobal);
+  const byteLen = hex.length/2;
+  const bytes = new Uint8Array(byteLen);
+  for(let i=0;i<byteLen;i++) bytes[i] = parseInt(hex.substr(i*2,2),16);
+  const dv = new DataView(bytes.buffer);
+  try{
+    switch(fmt){
+      case 'u16': return {text: dv.getUint16(0,false).toString()};
+      case 's16': return {text: dv.getInt16(0,false).toString()};
+      case 'hex': return {text: '0x'+hex.toUpperCase()};
+      case 'ascii': {
+        const printable = c => (c>=32 && c<127) ? String.fromCharCode(c) : '.';
+        return {text: printable(bytes[0])+printable(bytes[1])+'  (0x'+hex.toUpperCase()+')'};
+      }
+      case 'bin': return {text: dv.getUint16(0,false).toString(2).padStart(16,'0').replace(/(.{4})/g,'$1 ').trim()};
+      case 'u32': return {text: dv.getUint32(0,false).toString()};
+      case 's32': return {text: dv.getInt32(0,false).toString()};
+      case 'f32': { const v = dv.getFloat32(0,false); return {text: Number.isFinite(v)? trimFloat(v) : String(v)}; }
+      case 'u64': return {text: dv.getBigUint64(0,false).toString()};
+      case 's64': return {text: dv.getBigInt64(0,false).toString()};
+      case 'f64': { const v = dv.getFloat64(0,false); return {text: Number.isFinite(v)? trimFloat(v) : String(v)}; }
+      default: return {text:'-'};
+    }
+  }catch(e){ return {error:true, text:'Error'}; }
+}
+
+function decodeRegisters(){
+  const raw = document.getElementById('rawInput').value;
+  const bytes = parseTokensToBytes(raw);
+  const status = document.getElementById('parseStatus');
+
+  if(bytes.length===0){
+    status.textContent = 'Enter some hex bytes or register values first.';
+    status.style.color = '#c0392b';
+    return;
+  }
+
+  wordOrderGlobal = document.querySelector('input[name=wordOrder]:checked').value;
+  const byteOrder = document.querySelector('input[name=byteOrder]:checked').value;
+  registers = buildRegisters(bytes, byteOrder);
+
+  if(bytes.length % 2 !== 0){
+    status.textContent = `Parsed ${registers.length} register(s) - 1 leftover byte ignored (odd byte count).`;
+    status.style.color = '#b8860b';
+  } else {
+    status.textContent = `Parsed ${registers.length} register(s) from ${bytes.length} bytes.`;
+    status.style.color = '#27ae60';
+  }
+
+  renderRegTable();
+  entries = registers.map((r,i)=>({id:entryIdCounter++, start:i, format:'u16'}));
+  renderEntries();
+}
+
+function renderRegTable(){
+  const body = document.getElementById('regTableBody');
+  if(registers.length===0){ body.innerHTML = '<tr><td colspan="4">No data parsed yet.</td></tr>'; return; }
+  body.innerHTML = registers.map((hex,i)=>{
+    const u = parseInt(hex,16);
+    const s = u>32767 ? u-65536 : u;
+    return `<tr><td>${i}</td><td>0x${hex}</td><td>${u}</td><td>${s}</td></tr>`;
+  }).join('');
+}
+
+function addEntry(){
+  if(registers.length===0) return;
+  let start = 0;
+  if(entries.length>0){
+    const last = entries[entries.length-1];
+    start = last.start + FORMAT_LEN[last.format];
+    if(start>=registers.length) start = Math.max(0, registers.length-1);
+  }
+  entries.push({id:entryIdCounter++, start, format:'u16'});
+  renderEntries();
+}
+
+function removeEntry(id){
+  entries = entries.filter(e=>e.id!==id);
+  renderEntries();
+}
+
+function updateFormat(id, fmt){
+  const e = entries.find(e=>e.id===id);
+  if(!e) return;
+  e.format = fmt;
+  const len = FORMAT_LEN[fmt];
+  if(e.start+len>registers.length) e.start = Math.max(0, registers.length-len);
+  renderEntries();
+}
+
+function shiftEntry(id, delta){
+  const e = entries.find(e=>e.id===id);
+  if(!e) return;
+  const len = FORMAT_LEN[e.format];
+  const newStart = e.start + delta;
+  if(newStart<0 || newStart+len>registers.length) return;
+  e.start = newStart;
+  renderEntries();
+}
+
+function buildFormatOptions(selected){
+  let html = '';
+  FORMAT_GROUPS.forEach(group=>{
+    group.forEach(f=>{
+      html += `<option value="${f}" ${f===selected?'selected':''}>${FORMAT_LABEL[f]}</option>`;
+    });
+  });
+  return html;
+}
+
+function renderEntries(){
+  const list = document.getElementById('entriesList');
+  if(registers.length===0){
+    list.innerHTML = '<div class="schematic-empty">Decode registers above to start adding values.</div>';
+    return;
+  }
+  if(entries.length===0){
+    list.innerHTML = '<div class="schematic-empty">No decoded values yet. Click "+ Add Decoded Value".</div>';
+    return;
+  }
+  list.innerHTML = entries.map(e=>{
+    const len = FORMAT_LEN[e.format];
+    const result = decodeValue(e.start, len, e.format);
+    const label = len>1 ? `Reg ${e.start}-${e.start+len-1}` : `Reg ${e.start}`;
+    return `<div class="decode-entry">
+      <div class="reg-label">${label}</div>
+      <select onchange="updateFormat(${e.id}, this.value)">${buildFormatOptions(e.format)}</select>
+      <div class="updown-group">
+        <button onclick="shiftEntry(${e.id},-1)" ${e.start<=0?'disabled':''} title="Shift window up">&#9650;</button>
+        <button onclick="shiftEntry(${e.id},1)" ${e.start+len>=registers.length?'disabled':''} title="Shift window down">&#9660;</button>
+      </div>
+      <div class="decode-value ${result.error?'err':''}">${result.text}</div>
+      <button class="remove-btn" onclick="removeEntry(${e.id})" title="Remove">&#10005;</button>
+    </div>`;
+  }).join('');
+}
+
+renderRegTable();
+renderEntries();
+</script>
+</body>
+</html>
