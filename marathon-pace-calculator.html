@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marathon Pace Calculator - Electronics Toolkit</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23355c7d%22/><text x=%2250%22 y=%2270%22 font-size=%2260%22 font-family=%22Arial,sans-serif%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>M</text></svg>">
+<link rel="stylesheet" href="style.css">
+<style>
+.time-row{display:grid;grid-template-columns:150px 1fr 1fr 1fr;gap:6px;align-items:center;margin-bottom:6px}
+.time-row .t-label{font-weight:bold;color:#355c7d;font-size:13px}
+.time-row input{width:100%;padding:7px;border:1px solid #cfd8dc;border-radius:6px;font-size:13px;text-align:center}
+.time-head{display:grid;grid-template-columns:150px 1fr 1fr 1fr;gap:6px;margin-bottom:4px}
+.time-head span{font-size:10px;color:#8a99a8;text-align:center;text-transform:uppercase;letter-spacing:.3px}
+.result-item .r-tag{display:inline-block;font-size:10px;font-weight:bold;padding:1px 7px;border-radius:8px;margin-top:4px}
+.result-item.status-ok .r-tag{background:#e3f6ec;color:#27ae60}
+.result-item .r-tag.predicted{background:#eef4f8;color:#607080}
+.result-item .r-pace{font-size:11px;color:#666;margin-top:2px}
+.vdot-table{width:100%;border-collapse:collapse;font-size:12px}
+.vdot-table td{padding:4px 6px;border-bottom:1px solid #e3edf2}
+.vdot-table td:first-child{font-weight:bold;color:#355c7d}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="topnav"><a href="index.html">&larr; Back to Toolkit</a></div>
+
+  <header>
+    <h1>Marathon Pace Calculator</h1>
+    <p class="subtitle">Enter any of your recent race times &mdash; get equivalent race predictions using Jack Daniels' VDOT formula</p>
+  </header>
+
+  <div class="main-grid">
+    <div class="left-col">
+      <div class="card">
+        <h2>Your Race Times</h2>
+        <div class="eq-line">Fill in whichever race times you have (leave the rest at 00:00:00). More entries = a more reliable prediction, since the VDOT from each is averaged.</div>
+        <div class="time-head">
+          <span></span><span>HH</span><span>MM</span><span>SS</span>
+        </div>
+        <div class="time-row">
+          <div class="t-label">5K</div>
+          <input type="number" id="5kH" min="0" max="99" value="0">
+          <input type="number" id="5kM" min="0" max="59" value="0">
+          <input type="number" id="5kS" min="0" max="59" value="0">
+        </div>
+        <div class="time-row">
+          <div class="t-label">10K</div>
+          <input type="number" id="10kH" min="0" max="99" value="0">
+          <input type="number" id="10kM" min="0" max="59" value="0">
+          <input type="number" id="10kS" min="0" max="59" value="0">
+        </div>
+        <div class="time-row">
+          <div class="t-label">Half Marathon (21K)</div>
+          <input type="number" id="halfH" min="0" max="99" value="0">
+          <input type="number" id="halfM" min="0" max="59" value="0">
+          <input type="number" id="halfS" min="0" max="59" value="0">
+        </div>
+        <div class="time-row">
+          <div class="t-label">Full Marathon (42K)</div>
+          <input type="number" id="fullH" min="0" max="99" value="0">
+          <input type="number" id="fullM" min="0" max="59" value="0">
+          <input type="number" id="fullS" min="0" max="59" value="0">
+        </div>
+        <button class="calc-btn" onclick="calculatePredictions()">Predict Race Times</button>
+        <div class="eq-line" id="calcStatus" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Fitness Level (VDOT)</h2>
+      <div class="eq-line">VDOT is Jack Daniels' running fitness index, derived from your race pace and finish time. The same VDOT predicts equivalent effort at any distance.</div>
+      <table class="vdot-table" id="vdotTable">
+        <tr><td colspan="2">Enter a race time and calculate to see your VDOT.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Predicted Race Times</h2>
+    <div class="results-grid" id="resultsGrid">
+      <div class="result-item"><span>5K</span><h3>&mdash;</h3></div>
+      <div class="result-item"><span>10K</span><h3>&mdash;</h3></div>
+      <div class="result-item"><span>Half Marathon</span><h3>&mdash;</h3></div>
+      <div class="result-item"><span>Full Marathon</span><h3>&mdash;</h3></div>
+    </div>
+  </div>
+
+  <div class="site-footer">
+    <p class="credit"> by mihir patel, an <b>INDIAN</b> Electrical Engineer tyring hands on some basics of Engineering &nbsp;|&nbsp; Rev 1.0 "Reference Electronic Calculators"</p>
+  </div>
+</div>
+
+<script>
+const DISTANCES = [
+  {key:'5k',   label:'5K',                    meters:5000},
+  {key:'10k',  label:'10K',                   meters:10000},
+  {key:'half', label:'Half Marathon',         meters:21097.5},
+  {key:'full', label:'Full Marathon',         meters:42195}
+];
+
+function vo2(v){ return -4.60 + 0.182258*v + 0.000104*v*v; }
+function pctVO2max(t){ return 0.8 + 0.1894393*Math.exp(-0.012778*t) + 0.2989558*Math.exp(-0.1932605*t); }
+
+function vdotFromRace(distanceM, timeSec){
+  const tMin = timeSec/60;
+  const v = distanceM/tMin;
+  return vo2(v)/pctVO2max(tMin);
+}
+
+function predictTimeSec(distanceM, vdot){
+  let lo=1, hi=600;
+  for(let i=0;i<100;i++){
+    const mid=(lo+hi)/2;
+    const v=distanceM/mid;
+    const f = vo2(v)/pctVO2max(mid) - vdot;
+    if(f>0) lo=mid; else hi=mid;
+  }
+  return (lo+hi)/2*60;
+}
+
+function getEnteredSeconds(prefix){
+  const h = parseInt(document.getElementById(prefix+'H').value,10)||0;
+  const m = parseInt(document.getElementById(prefix+'M').value,10)||0;
+  const s = parseInt(document.getElementById(prefix+'S').value,10)||0;
+  const total = h*3600+m*60+s;
+  return total>0 ? total : null;
+}
+
+function secToTime(totalSec){
+  totalSec = Math.round(totalSec);
+  const h = Math.floor(totalSec/3600);
+  const m = Math.floor((totalSec%3600)/60);
+  const s = totalSec%60;
+  if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function secToPace(totalSec){
+  totalSec = Math.round(totalSec);
+  const m = Math.floor(totalSec/60);
+  const s = totalSec%60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function calculatePredictions(){
+  const status = document.getElementById('calcStatus');
+  const prefixMap = {'5k':'5k','10k':'10k','half':'half','full':'full'};
+
+  const provided = [];
+  DISTANCES.forEach(d=>{
+    const sec = getEnteredSeconds(prefixMap[d.key]);
+    if(sec!==null) provided.push({...d, timeSec:sec});
+  });
+
+  if(provided.length===0){
+    status.textContent = 'Enter at least one race time first.';
+    status.style.color = '#c0392b';
+    return;
+  }
+
+  const vdots = provided.map(p=>({label:p.label, vdot: vdotFromRace(p.meters, p.timeSec)}));
+  const avgVdot = vdots.reduce((sum,v)=>sum+v.vdot,0)/vdots.length;
+
+  status.textContent = `Using ${provided.length} entered time(s) - average VDOT ${avgVdot.toFixed(1)}.`;
+  status.style.color = '#27ae60';
+
+  const vdotTable = document.getElementById('vdotTable');
+  let rows = vdots.map(v=>`<tr><td>${v.label} (entered)</td><td>${v.vdot.toFixed(1)}</td></tr>`).join('');
+  rows += `<tr><td>Average (used)</td><td>${avgVdot.toFixed(1)}</td></tr>`;
+  vdotTable.innerHTML = rows;
+
+  const providedKeys = new Set(provided.map(p=>p.key));
+  const grid = document.getElementById('resultsGrid');
+  grid.innerHTML = DISTANCES.map(d=>{
+    const isProvided = providedKeys.has(d.key);
+    const timeSec = isProvided ? provided.find(p=>p.key===d.key).timeSec : predictTimeSec(d.meters, avgVdot);
+    const paceKm = timeSec/(d.meters/1000);
+    const paceMile = timeSec/(d.meters/1609.344);
+    const statusClass = isProvided ? 'status-ok' : '';
+    const tagText = isProvided ? 'Entered' : 'Predicted';
+    const tagClass = isProvided ? '' : 'predicted';
+    return `<div class="result-item ${statusClass}">
+      <span>${d.label}</span>
+      <h3>${secToTime(timeSec)}</h3>
+      <div class="r-pace">${secToPace(paceKm)} /km &nbsp;&bull;&nbsp; ${secToPace(paceMile)} /mi</div>
+      <span class="r-tag ${tagClass}">${tagText}</span>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
